@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Koshin 2048</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Manrope:wght@400;500;600;700;800&family=Space+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EDE3D0;
+    --bg-deep:#E1D3B6;
+    --frame:#C8B48B;
+    --ink:#2B241D;
+    --ink-soft:#726249;
+    --lapis:#1B4B7A;
+    --turq:#2FA8A0;
+    --terra:#C1652F;
+    --gold:#B8891F;
+    --cell:rgba(43,36,29,.07);
+    --paper:#F7F1E3;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.01ms !important;animation-iteration-count:1 !important;transition-duration:0.01ms !important;}
+  }
+  body{
+    min-height:100vh;
+    background:
+      radial-gradient(ellipse 90% 60% at 50% -10%, rgba(27,75,122,.08), transparent 60%),
+      var(--bg);
+    background-attachment:fixed;
+    font-family:'Manrope',sans-serif;
+    color:var(--ink);
+    display:flex;align-items:center;justify-content:center;
+    padding:28px 16px;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  /* faint tile-grout texture across the whole page */
+  body::before{
+    content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:
+      linear-gradient(rgba(43,36,29,.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(43,36,29,.035) 1px, transparent 1px);
+    background-size:46px 46px;
+  }
+  .stage{position:relative;z-index:1;width:100%;max-width:460px;}
+
+  /* ---------- header ---------- */
+  .crest{
+    display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:4px;
+  }
+  .xvl-mark{
+    text-align:center;font-family:'Manrope',sans-serif;font-size:10px;font-weight:800;
+    letter-spacing:.28em;color:var(--ink-soft);opacity:.7;margin-bottom:8px;
+  }
+  .crest .diamond{
+    width:7px;height:7px;background:var(--terra);transform:rotate(45deg);
+  }
+  .crest span{
+    font-family:'Manrope',sans-serif;font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--ink-soft);font-weight:700;
+  }
+  h1{
+    font-family:'Marcellus',serif;font-weight:400;font-size:44px;text-align:center;
+    letter-spacing:.02em;color:var(--ink);margin-bottom:4px;
+  }
+  h1 .num{color:var(--lapis);}
+  .tagline{
+    text-align:center;color:var(--ink-soft);font-size:13.5px;margin-bottom:22px;
+  }
+
+  /* ---------- scoreboard ---------- */
+  .board-top{
+    display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px;
+  }
+  .plaques{display:flex;gap:10px;}
+  .plaque{
+    background:var(--paper);border:1px solid var(--frame);border-radius:10px;
+    padding:8px 16px;text-align:center;min-width:74px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 2px 4px rgba(43,36,29,.08);
+  }
+  .plaque .plabel{
+    font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);font-weight:700;
+  }
+  .plaque .pval{
+    font-family:'Space Mono',monospace;font-weight:700;font-size:20px;color:var(--ink);
+    font-variant-numeric:tabular-nums;
+  }
+  .new-game-btn{
+    background:var(--lapis);color:var(--paper);border:none;border-radius:10px;
+    padding:12px 18px;font-family:'Manrope',sans-serif;font-weight:700;font-size:13.5px;
+    cursor:pointer;transition:background .2s, transform .15s;
+    box-shadow:0 3px 0 #123a5e;
+  }
+  .new-game-btn:hover{background:#204F82;}
+  .new-game-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #123a5e;}
+  .new-game-btn:focus-visible{outline:3px solid var(--terra);outline-offset:2px;}
+
+  /* ---------- board ---------- */
+  .board-frame{
+    position:relative;
+    background:linear-gradient(155deg, var(--bg-deep), var(--frame));
+    border-radius:18px;padding:12px;
+    box-shadow:0 20px 40px rgba(43,36,29,.22), inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .board{
+    position:relative;
+    display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);
+    gap:10px;aspect-ratio:1/1;
+    touch-action:none;
+  }
+  .cell-bg{
+    background:var(--cell);border-radius:9px;
+  }
+  .tiles-layer{
+    position:absolute;inset:0;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);gap:10px;
+  }
+  .tile{
+    position:relative;border-radius:9px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Space Mono',monospace;font-weight:700;
+    font-variant-numeric:tabular-nums;
+    animation:spawnTile .18s cubic-bezier(.3,1.4,.4,1);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.35), inset 0 -3px 6px rgba(0,0,0,.12), 0 3px 6px rgba(43,36,29,.18);
+    overflow:hidden;
+  }
+  .tile::after{
+    content:'';position:absolute;top:-40%;left:-30%;width:55%;height:200%;
+    background:linear-gradient(120deg, rgba(255,255,255,.35), transparent 60%);
+    transform:rotate(20deg);pointer-events:none;
+  }
+  .tile.merged{animation:mergePop .22s ease;}
+  @keyframes spawnTile{from{transform:scale(0);opacity:0;}to{transform:scale(1);opacity:1;}}
+  @keyframes mergePop{0%{transform:scale(1);}45%{transform:scale(1.14);}100%{transform:scale(1);}}
+  .tile.shimmer::before{
+    content:'';position:absolute;inset:0;
+    background:linear-gradient(100deg, transparent 30%, rgba(255,255,255,.55) 48%, transparent 66%);
+    background-size:220% 100%;background-position:120% 0;
+    animation:shimmerSweep .5s ease;
+  }
+  @keyframes shimmerSweep{from{background-position:120% 0;}to{background-position:-40% 0;}}
+
+  .t2{background:linear-gradient(155deg,#F3ECDA,#E4D8BE);color:var(--ink);font-size:clamp(20px,7vw,30px);}
+  .t4{background:linear-gradient(155deg,#DCEEEC,#BFE0DC);color:#1D5C56;font-size:clamp(20px,7vw,30px);}
+  .t8{background:linear-gradient(155deg,#8FD4CB,#57B4A8);color:#0E3B35;font-size:clamp(20px,7vw,30px);}
+  .t16{background:linear-gradient(155deg,#3FAFA0,#2A8B7E);color:#F7F1E3;font-size:clamp(19px,6.5vw,28px);}
+  .t32{background:linear-gradient(155deg,#4C86BE,#2E6494);color:#F7F1E3;font-size:clamp(19px,6.5vw,28px);}
+  .t64{background:linear-gradient(155deg,#2E6494,var(--lapis));color:#F7F1E3;font-size:clamp(19px,6.5vw,28px);}
+  .t128{background:linear-gradient(155deg,#E29A63,#CD7A3E);color:#3A1E08;font-size:clamp(17px,6vw,26px);}
+  .t256{background:linear-gradient(155deg,#CD7A3E,var(--terra));color:#F7F1E3;font-size:clamp(17px,6vw,26px);}
+  .t512{background:linear-gradient(155deg,var(--terra),#9B4A1F);color:#F7F1E3;font-size:clamp(17px,6vw,26px);}
+  .t1024{background:linear-gradient(155deg,#D9AE4E,var(--gold));color:#3A2A05;font-size:clamp(15px,5.5vw,23px);}
+  .t2048{background:linear-gradient(155deg,#F0CE72,#B8891F);color:#3A2A05;font-size:clamp(15px,5.5vw,23px);box-shadow:0 0 0 2px #F0CE72, 0 6px 16px rgba(184,137,31,.5);}
+  .t-hi{background:linear-gradient(155deg,var(--ink),#3d3428);color:#F0CE72;font-size:clamp(13px,5vw,20px);}
+
+  .instructions{
+    text-align:center;color:var(--ink-soft);font-size:12.5px;margin-top:18px;line-height:1.6;
+  }
+  .instructions kbd{
+    background:var(--paper);border:1px solid var(--frame);border-radius:4px;
+    padding:1px 6px;font-family:'Space Mono',monospace;font-size:11px;
+  }
+
+  /* ---------- overlay ---------- */
+  .overlay{
+    position:absolute;inset:12px;border-radius:14px;z-index:20;
+    background:rgba(237,227,208,.92);backdrop-filter:blur(2px);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    opacity:0;pointer-events:none;transition:opacity .3s ease;
+  }
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-family:'Marcellus',serif;font-size:30px;color:var(--ink);}
+  .overlay p{color:var(--ink-soft);font-size:13.5px;}
+  .overlay .new-game-btn{padding:12px 24px;}
+  .overlay-actions{display:flex;gap:10px;}
+  .ghost-btn{
+    background:transparent;color:var(--lapis);border:2px solid var(--lapis);box-shadow:none;
+  }
+  .ghost-btn:hover{background:rgba(27,75,122,.08);}
+  .ghost-btn:active{transform:none;}
+
+  @media (max-width:420px){
+    h1{font-size:36px;}
+    .plaque{padding:7px 12px;min-width:64px;}
+    .plaque .pval{font-size:17px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="xvl-mark">XVL</div>
+  <div class="crest"><div class="diamond"></div><span>Koshin o'yini</span><div class="diamond"></div></div>
+  <h1>Koshin <span class="num">2048</span></h1>
+  <p class="tagline">Bir xil raqamli plitkalarni birlashtiring — 2048 ga yeting</p>
+
+  <div class="board-top">
+    <div class="plaques">
+      <div class="plaque"><div class="plabel">Ball</div><div class="pval" id="score">0</div></div>
+      <div class="plaque"><div class="plabel">Rekord</div><div class="pval" id="best">0</div></div>
+    </div>
+    <button class="new-game-btn" onclick="newGame()">Yangi o'yin</button>
+  </div>
+
+  <div class="board-frame">
+    <div class="board" id="board">
+      <div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div>
+      <div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div>
+      <div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div>
+      <div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div>
+      <div class="tiles-layer" id="tilesLayer"></div>
+      <div class="overlay" id="overlay">
+        <h2 id="overlayTitle">O'yin tugadi</h2>
+        <p id="overlayText">Boshqa yurish joyi qolmadi.</p>
+        <div class="overlay-actions">
+          <button class="new-game-btn ghost-btn" id="continueBtn" onclick="dismissOverlay()" style="display:none;">Davom etish</button>
+          <button class="new-game-btn" onclick="newGame()">Qayta boshlash</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="instructions">Yurish uchun <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> tugmalarini bosing, yoki mobilda barmog'ingiz bilan suring.</p>
+</div>
+
+<script>
+  let grid, score, best = 0, won, wonAnnounced, over;
+
+  function emptyGrid(){ return Array.from({length:4},()=>Array(4).fill(0)); }
+
+  function newGame(){
+    grid = emptyGrid();
+    score = 0; won = false; wonAnnounced = false; over = false;
+    document.getElementById('overlay').classList.remove('show');
+    spawnTile(); spawnTile();
+    render();
+  }
+
+  function spawnTile(){
+    const empties = [];
+    for (let r=0;r<4;r++) for (let c=0;c<4;c++) if (grid[r][c]===0) empties.push([r,c]);
+    if (empties.length===0) return;
+    const [r,c] = empties[Math.floor(Math.random()*empties.length)];
+    grid[r][c] = Math.random() < 0.9 ? 2 : 4;
+  }
+
+  function tileClass(v){
+    if (v > 2048) return 't-hi';
+    return 't' + v;
+  }
+
+  function render(){
+    const layer = document.getElementById('tilesLayer');
+    layer.innerHTML = '';
+    for (let r=0;r<4;r++){
+      for (let c=0;c<4;c++){
+        const v = grid[r][c];
+        if (v===0) continue;
+        const el = document.createElement('div');
+        el.className = 'tile ' + tileClass(v);
+        el.style.gridRowStart = r+1;
+        el.style.gridColumnStart = c+1;
+        el.textContent = v;
+        layer.appendChild(el);
+      }
+    }
+    document.getElementById('score').textContent = score;
+    if (score > best){ best = score; }
+    document.getElementById('best').textContent = best;
+  }
+
+  function slideRowLeft(row){
+    let vals = row.filter(v=>v!==0);
+    let merged = [];
+    for (let i=0;i<vals.length-1;i++){
+      if (vals[i] === vals[i+1]){
+        vals[i] *= 2;
+        score += vals[i];
+        if (vals[i] === 2048 && !won){ won = true; }
+        vals.splice(i+1,1);
+        merged.push(vals[i]);
+      }
+    }
+    while (vals.length < 4) vals.push(0);
+    return vals;
+  }
+
+  function rotateGridCW(g){
+    const n = emptyGrid();
+    for (let r=0;r<4;r++) for (let c=0;c<4;c++) n[c][3-r] = g[r][c];
+    return n;
+  }
+
+  function move(dir){
+    if (over) return;
+    let g = grid.map(row => row.slice());
+    let rotations = { left:0, up:3, right:2, down:1 }[dir];
+    for (let i=0;i<rotations;i++) g = rotateGridCW(g);
+
+    let changed = false;
+    const newG = g.map(row=>{
+      const before = row.join(',');
+      const after = slideRowLeft(row);
+      if (after.join(',') !== before) changed = true;
+      return after;
+    });
+
+    let backRotations = (4 - rotations) % 4;
+    let finalG = newG;
+    for (let i=0;i<backRotations;i++) finalG = rotateGridCW(finalG);
+
+    if (changed){
+      grid = finalG;
+      spawnTile();
+      render();
+      checkGameState();
+    }
+  }
+
+  function canMove(){
+    for (let r=0;r<4;r++) for (let c=0;c<4;c++){
+      if (grid[r][c]===0) return true;
+      if (c<3 && grid[r][c]===grid[r][c+1]) return true;
+      if (r<3 && grid[r][c]===grid[r+1][c]) return true;
+    }
+    return false;
+  }
+
+  function checkGameState(){
+    if (won && !wonAnnounced){
+      wonAnnounced = true;
+      showOverlay("G'alaba! 🎉", "2048 plitkasiga yetdingiz — davom etishingiz mumkin.", true);
+      return;
+    }
+    if (!canMove()){
+      over = true;
+      showOverlay("O'yin tugadi", "Boshqa yurish joyi qolmadi.", false);
+    }
+  }
+
+  function showOverlay(title, text, showContinue){
+    document.getElementById('overlayTitle').textContent = title;
+    document.getElementById('overlayText').textContent = text;
+    document.getElementById('continueBtn').style.display = showContinue ? 'inline-flex' : 'none';
+    document.getElementById('overlay').classList.add('show');
+  }
+  function dismissOverlay(){
+    document.getElementById('overlay').classList.remove('show');
+  }
+
+  // Keyboard controls
+  document.addEventListener('keydown', (e) => {
+    const map = { ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down' };
+    if (map[e.key]){
+      e.preventDefault();
+      move(map[e.key]);
+    }
+  });
+
+  // Touch / swipe controls
+  let touchStartX = 0, touchStartY = 0;
+  const boardEl = document.getElementById('board');
+  boardEl.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, {passive:true});
+  boardEl.addEventListener('touchend', (e) => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    if (Math.abs(dx) > Math.abs(dy)){
+      move(dx > 0 ? 'right' : 'left');
+    } else {
+      move(dy > 0 ? 'down' : 'up');
+    }
+  }, {passive:true});
+
+  newGame();
+</script>
+
+</body>
+</html>
