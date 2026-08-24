@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Koshin 2048</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Manrope:wght@400;500;600;700;800&family=Space+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
@@ -24,6 +25,7 @@
   @media (prefers-reduced-motion: reduce){
     *{animation-duration:0.01ms !important;animation-iteration-count:1 !important;transition-duration:0.01ms !important;}
   }
+  html,body{overscroll-behavior:none;touch-action:none;}
   body{
     min-height:100vh;
     background:
@@ -36,6 +38,7 @@
     padding:28px 16px;
     -webkit-font-smoothing:antialiased;
     overflow-x:hidden;
+    touch-action:manipulation;
   }
   /* faint tile-grout texture across the whole page */
   body::before{
@@ -226,6 +229,16 @@
 </div>
 
 <script>
+  // ---- Telegram Mini App integration (safely no-ops in a regular browser) ----
+  if (window.Telegram && window.Telegram.WebApp){
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+    if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+    if (tg.setHeaderColor) tg.setHeaderColor('#EDE3D0');
+    if (tg.setBackgroundColor) tg.setBackgroundColor('#EDE3D0');
+  }
+
   let grid, score, best = 0, won, wonAnnounced, over;
 
   function emptyGrid(){ return Array.from({length:4},()=>Array(4).fill(0)); }
@@ -360,22 +373,34 @@
   });
 
   // Touch / swipe controls
-  let touchStartX = 0, touchStartY = 0;
+  let touchStartX = 0, touchStartY = 0, touchActive = false;
   const boardEl = document.getElementById('board');
   boardEl.addEventListener('touchstart', (e) => {
+    touchActive = true;
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
-  }, {passive:true});
+    e.preventDefault();
+  }, {passive:false});
+  boardEl.addEventListener('touchmove', (e) => {
+    if (touchActive) e.preventDefault();
+  }, {passive:false});
   boardEl.addEventListener('touchend', (e) => {
+    touchActive = false;
     const dx = e.changedTouches[0].clientX - touchStartX;
     const dy = e.changedTouches[0].clientY - touchStartY;
+    e.preventDefault();
     if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
     if (Math.abs(dx) > Math.abs(dy)){
       move(dx > 0 ? 'right' : 'left');
     } else {
       move(dy > 0 ? 'down' : 'up');
     }
-  }, {passive:true});
+  }, {passive:false});
+
+  // Safety net: block any stray swipe anywhere on the page from reaching
+  // Telegram's native close/navigate gesture (e.g. a swipe that starts
+  // just outside the board frame).
+  document.addEventListener('touchmove', (e) => { e.preventDefault(); }, {passive:false});
 
   newGame();
 </script>
