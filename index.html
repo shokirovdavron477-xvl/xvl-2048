@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Koshin 2048</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Manrope:wght@400;500;600;700;800&family=Space+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
@@ -100,6 +102,60 @@
   .new-game-btn:hover{background:#204F82;}
   .new-game-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #123a5e;}
   .new-game-btn:focus-visible{outline:3px solid var(--terra);outline-offset:2px;}
+
+  .top-btns{display:flex;align-items:center;gap:10px;}
+  .icon-btn{
+    width:44px;height:44px;border-radius:10px;
+    background:var(--paper);border:1px solid var(--frame);
+    font-size:19px;cursor:pointer;transition:transform .15s, border-color .2s;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .icon-btn:hover{border-color:var(--gold);transform:translateY(-1px);}
+
+  /* ---------- leaderboard overlay ---------- */
+  .lb-overlay{
+    position:fixed;inset:0;z-index:100;
+    background:rgba(43,36,29,.55);backdrop-filter:blur(2px);
+    display:flex;align-items:center;justify-content:center;padding:20px;
+    opacity:0;pointer-events:none;transition:opacity .25s ease;
+  }
+  .lb-overlay.show{opacity:1;pointer-events:auto;}
+  .lb-card{
+    position:relative;width:100%;max-width:380px;
+    background:var(--paper);border:1px solid var(--frame);border-radius:16px;
+    padding:28px 24px 20px;
+    box-shadow:0 24px 48px rgba(43,36,29,.3);
+    transform:translateY(14px);transition:transform .25s ease;
+  }
+  .lb-overlay.show .lb-card{transform:translateY(0);}
+  .lb-close{
+    position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    color:var(--ink-soft);transition:background .2s;
+  }
+  .lb-close:hover{background:var(--cell);}
+  .lb-head{text-align:center;margin-bottom:18px;}
+  .lb-trophy{font-size:34px;display:block;margin-bottom:6px;}
+  .lb-head h3{font-family:'Marcellus',serif;font-size:24px;color:var(--ink);}
+  .lb-head p{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+  .lb-list{display:flex;flex-direction:column;gap:0;max-height:340px;overflow-y:auto;}
+  .lb-row{
+    display:flex;align-items:center;gap:12px;padding:10px 4px;
+    border-top:1px solid var(--cell);
+  }
+  .lb-row:first-child{border-top:none;}
+  .lb-rank{
+    width:26px;height:26px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Space Mono',monospace;font-weight:700;font-size:12px;
+    background:var(--cell);color:var(--ink-soft);
+  }
+  .lb-row:nth-child(1) .lb-rank{background:linear-gradient(155deg,#F0CE72,#B8891F);color:#3A2A05;}
+  .lb-row:nth-child(2) .lb-rank{background:#D9DEE6;color:#3A424E;}
+  .lb-row:nth-child(3) .lb-rank{background:#E3B98F;color:#4A2E12;}
+  .lb-name{flex:1;font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .lb-score{font-family:'Space Mono',monospace;font-weight:700;font-size:14px;color:var(--lapis);}
+  .lb-loading, .lb-empty{text-align:center;color:var(--ink-soft);font-size:13px;padding:24px 0;}
 
   /* ---------- board ---------- */
   .board-frame{
@@ -204,7 +260,10 @@
       <div class="plaque"><div class="plabel">Ball</div><div class="pval" id="score">0</div></div>
       <div class="plaque"><div class="plabel">Rekord</div><div class="pval" id="best">0</div></div>
     </div>
-    <button class="new-game-btn" onclick="newGame()">Yangi o'yin</button>
+    <div class="top-btns">
+      <button class="icon-btn" onclick="openLeaderboard()" title="Reyting">🏆</button>
+      <button class="new-game-btn" onclick="newGame()">Yangi o'yin</button>
+    </div>
   </div>
 
   <div class="board-frame">
@@ -228,8 +287,23 @@
   <p class="instructions">Yurish uchun <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> tugmalarini bosing, yoki mobilda barmog'ingiz bilan suring.</p>
 </div>
 
+<div class="lb-overlay" id="lbOverlay">
+  <div class="lb-card">
+    <div class="lb-close" onclick="closeLeaderboard()">✕</div>
+    <div class="lb-head">
+      <span class="lb-trophy">🏆</span>
+      <h3>Reyting</h3>
+      <p>Eng yaxshi 10 ta natija</p>
+    </div>
+    <div class="lb-list" id="lbList">
+      <div class="lb-loading">Yuklanmoqda…</div>
+    </div>
+  </div>
+</div>
+
 <script>
   // ---- Telegram Mini App integration (safely no-ops in a regular browser) ----
+  let tgPlayerName = "Mehmon";
   if (window.Telegram && window.Telegram.WebApp){
     const tg = window.Telegram.WebApp;
     tg.ready();
@@ -237,6 +311,76 @@
     if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
     if (tg.setHeaderColor) tg.setHeaderColor('#EDE3D0');
     if (tg.setBackgroundColor) tg.setBackgroundColor('#EDE3D0');
+    const u = tg.initDataUnsafe && tg.initDataUnsafe.user;
+    if (u && u.first_name) tgPlayerName = u.first_name;
+  }
+
+  // ---- Firebase (leaderboard) ----
+  const firebaseConfig = {
+    apiKey: "AIzaSyAeUWNbeFWd4s0oV_nDuqj7mLaPMqXxQsY",
+    authDomain: "xvl-2048.firebaseapp.com",
+    projectId: "xvl-2048",
+    storageBucket: "xvl-2048.firebasestorage.app",
+    messagingSenderId: "988513397419",
+    appId: "1:988513397419:web:4e322768eb048733e725ee"
+  };
+  let db = null;
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+  } catch (e) {
+    console.warn("Firebase not available:", e);
+  }
+
+  let scoreSavedThisGame = false;
+
+  async function saveScore(finalScore){
+    if (!db || finalScore <= 0 || scoreSavedThisGame) return;
+    scoreSavedThisGame = true;
+    try {
+      await db.collection('scores').add({
+        name: tgPlayerName.slice(0, 24),
+        score: finalScore,
+        ts: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (e) {
+      console.warn("Could not save score:", e);
+    }
+  }
+
+  async function openLeaderboard(){
+    document.getElementById('lbOverlay').classList.add('show');
+    const listEl = document.getElementById('lbList');
+    listEl.innerHTML = '<div class="lb-loading">Yuklanmoqda…</div>';
+    if (!db){
+      listEl.innerHTML = '<div class="lb-empty">Reyting hozircha mavjud emas.</div>';
+      return;
+    }
+    try {
+      const snap = await db.collection('scores').orderBy('score', 'desc').limit(10).get();
+      if (snap.empty){
+        listEl.innerHTML = '<div class="lb-empty">Hali hech kim o\'ynamagan — birinchi bo\'ling!</div>';
+        return;
+      }
+      let html = '';
+      let rank = 1;
+      snap.forEach(doc => {
+        const d = doc.data();
+        html += `<div class="lb-row"><div class="lb-rank">${rank}</div><div class="lb-name">${escapeHtml(d.name || 'Mehmon')}</div><div class="lb-score">${d.score}</div></div>`;
+        rank++;
+      });
+      listEl.innerHTML = html;
+    } catch (e) {
+      listEl.innerHTML = '<div class="lb-empty">Reytingni yuklab bo\'lmadi.</div>';
+    }
+  }
+
+  function closeLeaderboard(){
+    document.getElementById('lbOverlay').classList.remove('show');
+  }
+
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
   let grid, score, best = 0, won, wonAnnounced, over;
@@ -246,6 +390,7 @@
   function newGame(){
     grid = emptyGrid();
     score = 0; won = false; wonAnnounced = false; over = false;
+    scoreSavedThisGame = false;
     document.getElementById('overlay').classList.remove('show');
     spawnTile(); spawnTile();
     render();
@@ -350,6 +495,7 @@
     if (!canMove()){
       over = true;
       showOverlay("O'yin tugadi", "Boshqa yurish joyi qolmadi.", false);
+      saveScore(score);
     }
   }
 
@@ -401,6 +547,10 @@
   // Telegram's native close/navigate gesture (e.g. a swipe that starts
   // just outside the board frame).
   document.addEventListener('touchmove', (e) => { e.preventDefault(); }, {passive:false});
+
+  document.getElementById('lbOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'lbOverlay') closeLeaderboard();
+  });
 
   newGame();
 </script>
